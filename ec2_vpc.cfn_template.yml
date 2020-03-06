@@ -18,9 +18,11 @@ Parameters:
   DmzSubnet1Cidr:
     Description: The IP range (CIDR notation) for the DMZ subnet in the first Availability Zone
     Type: String
+    AllowedPattern: ((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}
   DmzSubnet2Cidr:
     Description: The IP range (CIDR notation) for the DMZ subnet in the second Availability Zone
     Type: String
+    AllowedPattern: ((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}
   HostedZoneName:
     Description: The domain name of the Route53 internal hosted zone
     Type: String
@@ -30,12 +32,15 @@ Parameters:
   PrivateSubnet1Cidr:
     Description: The IP range (CIDR notation) for the PRIVATE subnet in the first Availability Zone
     Type: String
+    AllowedPattern: ((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}
   PrivateSubnet2Cidr:
     Description: The IP range (CIDR notation) for the PRIVATE subnet in the second Availability Zone
     Type: String
+    AllowedPattern: ((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}
   VpcCidr:
     Description: The IP range (CIDR notation) for this VPC
     Type: String
+    AllowedPattern: ((\\d{1,3})\\.){3}\\d{1,3}/\\d{1,2}
 
 # Mappings:
 
@@ -161,7 +166,7 @@ Resources:
         - Key: Name
           Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetA Routes (AZ1)"
   VpcPrivateDefaultRoute1:
-    Type: AWS::EC2:A:Route
+    Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref VpcPrivateRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
@@ -179,7 +184,7 @@ Resources:
         - Key: Name
           Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetB Routes (AZ2)"
   VpcPrivateDefaultRoute2:
-    Type: AWS::EC2:A:Route
+    Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref VpcPrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
@@ -222,13 +227,13 @@ Resources:
         - CidrIp: !Ref VpcCidr
           Description: Allow all internal inbound
           FromPort: -1
-          IpProtocol: -1
+          IpProtocol: '-1'
           ToPort: -1
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow all internal outbound
           FromPort: -1
-          IpProtocol: -1
+          IpProtocol: '-1'
           ToPort: -1
       Tags:
         - Key: Name
@@ -252,7 +257,7 @@ Outputs:
     Value: !Ref VpcDmzSubnet2
   PrivateSubnets:
     Description: A list of the PRIVATE subnets
-    Value: !Join [",", [!Ref VpcGpPrivateSubnetA1, !Ref VpcPrivateSubnet2]]
+    Value: !Join [",", [!Ref VpcPrivateSubnet1, !Ref VpcPrivateSubnet2]]
   PrivateSubnet1:
     Description: A reference to the PRIVATE subnet in the 1st Availability Zone
     Value: !Ref VpcPrivateSubnet1
