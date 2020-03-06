@@ -1,0 +1,14 @@
+---
+
+extends: default
+
+rules:
+  line-length:
+    max: 160
+    level: error
+#   truthy:
+#     allowed-values:
+#       - 'true'
+#       - 'yes'
+#       - 'false'
+#       - 'no'

@@ -1,0 +1,261 @@
+---
+
+Description: >-
+  This template deploys a general purpose VPC, with a pair of public (DMZ) and
+  private subnets spread across two Availability Zones. It deploys an internet
+  gateway, with a default route on the DMZ subnets. It deploys NAT gateways in
+  the DMZ subnets (AZ1/2), with a default route on the private subnets. It
+  deploys a Route53 internal hosted zone with a DHCP options set. It deploys a
+  set of security groups, one with no ingress allowed, and another that allows
+  intra-vpc and outbound network traffic.
+
+# Metadata:
+
+Parameters:
+  VpcShortName:
+    Description: A short name that is prefixed to VPC resource names
+    Type: String
+  DmzSubnet1Cidr:
+    Description: The IP range (CIDR notation) for the DMZ subnet in the first Availability Zone
+    Type: String
+  DmzSubnet2Cidr:
+    Description: The IP range (CIDR notation) for the DMZ subnet in the second Availability Zone
+    Type: String
+  HostedZoneName:
+    Description: The domain name of the Route53 internal hosted zone
+    Type: String
+  HostedZoneRegion:
+    Description: The associated VPC region of the Route53 internal hosted zone
+    Type: String
+  PrivateSubnet1Cidr:
+    Description: The IP range (CIDR notation) for the PRIVATE subnet in the first Availability Zone
+    Type: String
+  PrivateSubnet2Cidr:
+    Description: The IP range (CIDR notation) for the PRIVATE subnet in the second Availability Zone
+    Type: String
+  VpcCidr:
+    Description: The IP range (CIDR notation) for this VPC
+    Type: String
+
+# Mappings:
+
+# Conditions:
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC"
+  VpcInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC-IGW"
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref VpcInternetGateway
+      VpcId: !Ref Vpc
+  VpcDmzSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref DmzSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC DMZ SubnetA (AZ1)"
+      VpcId: !Ref Vpc
+  VpcDmzSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref DmzSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC DMZ SubnetB (AZ2)"
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetA (AZ1)"
+      VpcId: !Ref Vpc
+  VpcPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetB (AZ2)"
+      VpcId: !Ref Vpc
+  VpcNatGateway1Eip:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+  VpcNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt VpcNatGateway1Eip.AllocationId
+      SubnetId: !Ref VpcDmzSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC-NAT-AZ1_A"
+  VpcNatGateway2Eip:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+  VpcNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt VpcNatGateway2Eip.AllocationId
+      SubnetId: !Ref VpcDmzSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC-NAT-AZ2_B"
+  VpcDmzRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC DMZ Routes"
+  VpcDmzDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref VpcDmzRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VpcInternetGateway
+  VpcDmzSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VpcDmzSubnet1
+      RouteTableId: !Ref VpcDmzRouteTable
+  VpcDmzSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VpcDmzSubnet2
+      RouteTableId: !Ref VpcDmzRouteTable
+  VpcPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetA Routes (AZ1)"
+  VpcPrivateDefaultRoute1:
+    Type: AWS::EC2:A:Route
+    Properties:
+      RouteTableId: !Ref VpcPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcNatGateway1
+  VpcPrivateSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VpcPrivateSubnet1
+      RouteTableId: !Ref VpcPrivateRouteTable1
+  VpcPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC PRIVATE SubnetB Routes (AZ2)"
+  VpcPrivateDefaultRoute2:
+    Type: AWS::EC2:A:Route
+    Properties:
+      RouteTableId: !Ref VpcPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref VpcNatGateway2
+  VpcPrivateSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref VpcPrivateSubnet2
+      RouteTableId: !Ref VpcPrivateRouteTable2
+  VpcPrivateRoute53HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref HostedZoneName
+      HostedZoneConfig:
+        Comment: !Sub "${VpcShortName}_VPC Internal DNS Zone"
+      VPCs:
+        - VPCId: !Ref Vpc
+          VPCRegion: !Ref HostedZoneRegion
+  VpcPrivateDhcpOptionSet:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: !Ref HostedZoneName
+      DomainNameServers:
+        - AmazonProvidedDNS
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC DHCP Options set"
+  VpcNoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: no-ingress-sg
+      GroupDescription: Security group with no ingress rule
+      VpcId: !Ref Vpc
+  VpcInternalIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${VpcShortName}_VPC - Internal Open"
+      GroupDescription: !Sub "Allow intra-VPC and outbound with source ${VpcCidr}"
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCidr
+          Description: Allow all internal inbound
+          FromPort: -1
+          IpProtocol: -1
+          ToPort: -1
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all internal outbound
+          FromPort: -1
+          IpProtocol: -1
+          ToPort: -1
+      Tags:
+        - Key: Name
+          Value: !Sub "${VpcShortName}_VPC Internal Security Group"
+      VpcId: !Ref Vpc
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCID"
+  DmzSubnets:
+    Description: A list of the DMZ subnets
+    Value: !Join [",", [!Ref VpcDmzSubnet1, !Ref VpcDmzSubnet2]]
+  DmzSubnet1:
+    Description: A reference to the DMZ subnet in the 1st Availability Zone
+    Value: !Ref VpcDmzSubnet1
+  DmzSubnet2:
+    Description: A reference to the DMZ subnet in the 2nd Availability Zone
+    Value: !Ref VpcDmzSubnet2
+  PrivateSubnets:
+    Description: A list of the PRIVATE subnets
+    Value: !Join [",", [!Ref VpcGpPrivateSubnetA1, !Ref VpcPrivateSubnet2]]
+  PrivateSubnet1:
+    Description: A reference to the PRIVATE subnet in the 1st Availability Zone
+    Value: !Ref VpcPrivateSubnet1
+  PrivateSubnet2:
+    Description: A reference to the PRIVATE subnet in the 2nd Availability Zone
+    Value: !Ref VpcPrivateSubnet2
